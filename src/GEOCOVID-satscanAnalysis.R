@@ -12,10 +12,10 @@ library(rsatscan)
 
 # IMPORT DATA --------------------------------------------------------------------
 
-dir <- paste0('../outputs/COVID_satscan/ByRELI/ByDays/')
-cases_all <- read_delim(paste0(dir,'cases.csv'),',',col_names=TRUE) %>% mutate(date=format(date, "%Y/%m/%d")) %>% select(reli, ncov_cases, date)
-pop_all <- read_delim(paste0(dir,'population.csv'),',',col_names=TRUE) %>% select(reli, date, b19btot)
-geo <- read.csv(paste0(dir,'geo_reli_satscan.csv'),header=TRUE) %>% select(reli,y,x)
+dir <- paste0('../processed_data/satscan_models/model2/')
+cases_all <- read_delim(paste0(dir,'cases_rsatscan.csv'),',',col_names=TRUE) %>% mutate(date=format(date, "%Y/%m/%d")) %>% select(reli, nb_cases, date)
+pop_all <- read_delim(paste0(dir,'pop_rsatscan.csv'),',',col_names=TRUE) %>% select(reli, date, b20btot)
+geo <- read.csv(paste0(dir,'geo_reli_rsatscan.csv'),header=TRUE) %>% select(reli,y,x)
 
 # INITIAL PARAMS ------------------------------------------------------
 ssenv <<- new.env(parent=emptyenv())
@@ -324,8 +324,34 @@ ssenv$.ss.params = x
 start <- as.Date("2020/03/01",format="%Y/%m/%d")
 end <- as.Date(max(cases_all$date), format="%Y/%m/%d")
 #end <- as.Date("2020/03/29",format="%Y/%m/%d")
-theDate <- as.Date("2020/04/16",format="%Y/%m/%d")
-#theDate<-start
+#theDate <- as.Date("2020/04/16",format="%Y/%m/%d")
+theDate<-start
+
+# Define parameters
+satscan_usr_param = list(
+   CaseFile="cases.cas",
+   PopulationFile="population.pop",
+   CoordinatesFile="geo.geo",
+   PrecisionCaseTimes="3",#3=Day
+   StartDate=format(as.Date(start),"%Y/%-m/%-d"),EndDate=format(as.Date(theDate),"%Y/%-m/%-d"),
+   CoordinatesType=1, #1=Lat/Lon
+   AnalysisType=4, #4=Prospective Space-Time (3=Retrospective Space-Time)
+   ModelType=0, #0=Discrete Poisson
+   ScanAreas=1, #1=High rates
+   ResultsFile=paste0(dir,'res.txt'),
+   MaxSpatialSizeInPopulationAtRisk=10, #10%
+   SpatialWindowShapeType=0, #0=Circles
+   MaxTemporalSize=14, #50% (14 days)
+   MaxTemporalSizeInterpretation=1, #0=Percentage (1=Time)
+   TimeAggregationUnits=3, #day
+   MaxSpatialSizeInPopulationAtRisk_Reported=0.5, #0.5%
+   OutputTemporalGraphHTML='y',
+   MonteCarloReps=999,
+   AdjustForEarlierAnalyses='n',
+   MinimumCasesInHighRateClusters=3, #Min 3 cases
+   MinimumTemporalClusterSize=2,
+   Version='9.6.0')
+
 
 while (theDate <= end)
 {
@@ -339,58 +365,24 @@ while (theDate <= end)
    write.pop(as.data.frame(pop),td,"population")
    write.geo(geo, td, "geo")
    
+   
    if(as.numeric(theDate-start, units="days")<=14){
+      
+      # Use 50% instead of 14 days
+      satscan_usr_param$MaxTemporalSize <= 50
+      satscan_usr_param$MaxTemporalSizeInterpretation <= 0
+      
       #Reset parameters
       invisible(ss.options(reset=TRUE))
       #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
-      ss.options(list(CaseFile="cases.cas",
-                      PopulationFile="population.pop",
-                      CoordinatesFile="geo.geo",
-                      PrecisionCaseTimes="3",#3=Day
-                      StartDate=format(as.Date(start),"%Y/%-m/%-d"),EndDate=format(as.Date(theDate),"%Y/%-m/%-d"),
-                      CoordinatesType=1, #1=Lat/Lon
-                      AnalysisType=4, #4=Prospective Space-Time
-                      ModelType=0, #0=Discrete Poisson
-                      ScanAreas=1, #1=High rates
-                      ResultsFile=paste0(dir,'res.txt'),
-                      MaxSpatialSizeInPopulationAtRisk=10, #10%
-                      SpatialWindowShapeType=0, #0=Circles
-                      MaxTemporalSize=50, #50%
-                      MaxTemporalSizeInterpretation=0, #Percentage
-                      TimeAggregationUnits=3, #day
-                      MaxSpatialSizeInPopulationAtRisk_Reported=0.5, #0.5%
-                      OutputTemporalGraphHTML='y',
-                      MonteCarloReps=999,
-                      AdjustForEarlierAnalyses='n',
-                      MinimumCasesInHighRateClusters=3, #Min 3 cases
-                      MinimumTemporalClusterSize=2,
-                      Version='9.6.0'))
+      ss.options(satscan_usr_param)
       write.ss.prm(td, "geocovid")
+      
    }else{
       #Reset parameters
       invisible(ss.options(reset=TRUE))
       #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
-      ss.options(list(CaseFile="cases.cas",
-                      PopulationFile="population.pop",
-                      CoordinatesFile="geo.geo",
-                      PrecisionCaseTimes="3",#3=Day
-                      StartDate=format(as.Date(start),"%Y/%-m/%-d"),EndDate=format(as.Date(theDate),"%Y/%-m/%-d"),
-                      CoordinatesType=1, #1=Lat/Lon
-                      AnalysisType=4, #4=Prospective Space-Time
-                      ModelType=0, #0=Discrete Poisson
-                      ScanAreas=1, #1=High rates
-                      ResultsFile=paste0(dir,'res.txt'),
-                      MaxSpatialSizeInPopulationAtRisk=10, #10%
-                      SpatialWindowShapeType=0, #0=Circles
-                      MaxTemporalSize=14, #14days
-                      MaxTemporalSizeInterpretation=1, #Time
-                      TimeAggregationUnits=3, #day
-                      MaxSpatialSizeInPopulationAtRisk_Reported=0.5, #0.5%
-                      OutputTemporalGraphHTML='y',
-                      MonteCarloReps=999,
-                      AdjustForEarlierAnalyses='n',
-                      MinimumCasesInHighRateClusters=3, #Min 3 cases
-                      Version='9.6.0'))
+      ss.options(satscan_usr_param)
       write.ss.prm(td, "geocovid")
    }
 
