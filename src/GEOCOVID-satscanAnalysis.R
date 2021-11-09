@@ -12,10 +12,10 @@ library(rsatscan)
 
 # IMPORT DATA --------------------------------------------------------------------
 
-dir <- paste0('../processed_data/satscan_models/model2/')
+dir <- paste0('../processed_data/satscan_models/model3/')
 cases_all <- read_delim(paste0(dir,'cases_rsatscan.csv'),',',col_names=TRUE) %>% mutate(date=format(date, "%Y/%m/%d")) %>% select(reli, nb_cases, date)
 pop_all <- read_delim(paste0(dir,'pop_rsatscan.csv'),',',col_names=TRUE) %>% select(reli, date, b20btot)
-geo <- read.csv(paste0(dir,'geo_reli_rsatscan.csv'),header=TRUE) %>% select(reli,y,x)
+geo <- read.csv(paste0(dir,'geo_reli_rsatscan.csv'),header=TRUE) %>% select(reli, y, x)
 
 # INITIAL PARAMS ------------------------------------------------------
 ssenv <<- new.env(parent=emptyenv())
@@ -311,7 +311,7 @@ x=c("[Input]",";case data filename",
 ";suppressing warnings? (y/n)",
 "SuppressWarnings=n",
 ";log analysis run to history file? (y/n)",
-"LogRunToHistoryFile=n",
+"LogRunToHistoryFile=y",
 ";analysis execution method  (0=Automatic, 1=Successively, 2=Centrically)",
 "ExecutionType=0",
 "[System]",";system setting - do not modify","Version=9.2.0")
@@ -320,29 +320,30 @@ ssenv$.ss.params.defaults = x
 ssenv$.ss.params = x
 
 # WHILE LOOP --------------------------------------------------------------
-
-start <- as.Date("2020/03/01",format="%Y/%m/%d")
+   
+start <- as.Date("2020/03/02",format="%Y/%m/%d")
 end <- as.Date(max(cases_all$date), format="%Y/%m/%d")
 #end <- as.Date("2020/03/29",format="%Y/%m/%d")
-#theDate <- as.Date("2020/04/16",format="%Y/%m/%d")
-theDate<-start
-
+theDate <- as.Date("2020/03/06",format="%Y/%m/%d")
+# theDate<-start
+   
 # Define parameters
 satscan_usr_param = list(
    CaseFile="cases.cas",
    PopulationFile="population.pop",
    CoordinatesFile="geo.geo",
    PrecisionCaseTimes="3",#3=Day
-   StartDate=format(as.Date(start),"%Y/%-m/%-d"),EndDate=format(as.Date(theDate),"%Y/%-m/%-d"),
+   StartDate=format(as.Date(start),"%Y/%-m/%-d"),
+   EndDate=format(as.Date(end),"%Y/%-m/%-d"),
    CoordinatesType=1, #1=Lat/Lon
-   AnalysisType=4, #4=Prospective Space-Time (3=Retrospective Space-Time)
+   AnalysisType=3, #4=Prospective Space-Time (3=Retrospective Space-Time)
    ModelType=0, #0=Discrete Poisson
    ScanAreas=1, #1=High rates
    ResultsFile=paste0(dir,'res.txt'),
    MaxSpatialSizeInPopulationAtRisk=10, #10%
    SpatialWindowShapeType=0, #0=Circles
-   MaxTemporalSize=14, #50% (14 days)
-   MaxTemporalSizeInterpretation=1, #0=Percentage (1=Time)
+   MaxTemporalSize=50, #50% (14 days)
+   MaxTemporalSizeInterpretation=0, #0=Percentage (1=Time)
    TimeAggregationUnits=3, #day
    MaxSpatialSizeInPopulationAtRisk_Reported=0.5, #0.5%
    OutputTemporalGraphHTML='y',
@@ -350,42 +351,24 @@ satscan_usr_param = list(
    AdjustForEarlierAnalyses='n',
    MinimumCasesInHighRateClusters=3, #Min 3 cases
    MinimumTemporalClusterSize=2,
-   Version='9.6.0')
+   Version='9.6.1')
+   
 
-
-while (theDate <= end)
-{
-   #Filter cases and controls for the given time period
-   cases<-cases_all %>% filter(date>=start & date<=theDate) %>% mutate(date=format(as.Date(date),"%Y/%-m/%-d"))
-   pop<-pop_all
+if (satscan_usr_param$AnalysisType == 3){
    
    #Create temporary directory and store csv for satscan
    td = tempdir()
-   write.cas(as.data.frame(cases),td, "cases")
-   write.pop(as.data.frame(pop),td,"population")
+   write.cas(as.data.frame(cases_all),td, "cases")
+   write.pop(as.data.frame(pop_all),td,"population")
    write.geo(geo, td, "geo")
    
+   #Reset parameters
+   invisible(ss.options(reset=TRUE))
+   #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
+   #print(satscan_usr_param)
+   ss.options(satscan_usr_param)
+   write.ss.prm(td, "geocovid")
    
-   if(as.numeric(theDate-start, units="days")<=14){
-      
-      # Use 50% instead of 14 days
-      satscan_usr_param$MaxTemporalSize <= 50
-      satscan_usr_param$MaxTemporalSizeInterpretation <= 0
-      
-      #Reset parameters
-      invisible(ss.options(reset=TRUE))
-      #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
-      ss.options(satscan_usr_param)
-      write.ss.prm(td, "geocovid")
-      
-   }else{
-      #Reset parameters
-      invisible(ss.options(reset=TRUE))
-      #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
-      ss.options(satscan_usr_param)
-      write.ss.prm(td, "geocovid")
-   }
-
    
    tryCatch(
       {
@@ -419,11 +402,88 @@ while (theDate <= end)
       
    )
    
-   theDate <- theDate + 1                    
+}else{
+   
+   while (theDate <= end){
+      print(theDate)
+      
+      #Filter cases and controls for the given time period
+      cases <- cases_all %>% filter(date>=start & date<=theDate) %>% mutate(date=format(as.Date(date),"%Y/%-m/%-d"))
+      pop <- pop_all %>% filter(date>=start & date<=theDate) %>% mutate(date=format(as.Date(date),"%Y/%-m/%-d"))
+      
+      #Create temporary directory and store csv for satscan
+      td = tempdir()
+      write.cas(as.data.frame(cases),td, "cases")
+      write.pop(as.data.frame(pop),td,"population")
+      write.geo(geo, td, "geo")
+      
+      
+      if(as.numeric(theDate-start, units="days")<=14){
+         
+         # Use 50% instead of 14 days
+         satscan_usr_param$MaxTemporalSize = 50
+         satscan_usr_param$MaxTemporalSizeInterpretation = 0
+         satscan_usr_param$EndDate = format(as.Date(theDate),"%Y/%-m/%-d")
+         
+         #Reset parameters
+         invisible(ss.options(reset=TRUE))
+         #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
+         #print(satscan_usr_param)
+         ss.options(satscan_usr_param)
+         write.ss.prm(td, "geocovid")
+         
+      }else{
+         satscan_usr_param$EndDate = format(as.Date(theDate),"%Y/%-m/%-d")
+         #Reset parameters
+         invisible(ss.options(reset=TRUE))
+         #options for satscan can be found here https://rdrr.io/cran/rsatscan/src/R/zzz.R
+         ss.options(satscan_usr_param)
+         write.ss.prm(td, "geocovid")
+      }
+      
+      
+      tryCatch(
+         {
+            #Run analysis
+            res = satscan(td,"geocovid",sslocation="/home/aladoy/SaTScan")
+            
+            #Extract clusters shape 
+            clusters=st_as_sf(res$shapeclust)
+            
+            #Save text file
+            capture.output(summary(res), file=paste0(dir,theDate,'_results.txt'),append=FALSE)
+            
+            #Save to shapefile
+            st_write(clusters %>% select(-c(RECURR_INT,ODE,GINI_CLUST)),paste0(dir,theDate,'_results.geojson'),driver='GeoJSON')
+         },
+         
+         warning = function(cond) {
+            message("Here's the original warning message:")
+            message(cond)
+            # Choose a return value when such a type of condition occurs
+         },
+         
+         # Handler when an error occurs:
+         error = function(cond) {
+            message("Here's the original error message:")
+            message(cond)
+         },
+         
+         finally = {
+         }
+         
+      )
+      
+      theDate <- theDate + 1                    
+      
+   }
+   
    
 }
 
 
 
    
-
+   
+      
+   
