@@ -4,3 +4,5 @@ results/
 .Rproj.user
 .Rhistory
 src.Rproj
+doc/
+manuscript/
